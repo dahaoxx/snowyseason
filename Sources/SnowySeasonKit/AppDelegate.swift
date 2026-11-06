@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let tracker = WindowTracker()
     private var statusMenu: StatusMenu?
     private var overlays: [OverlayWindow] = []
@@ -9,7 +9,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Screens asleep or the user session switched away: nothing to draw for.
     private var isPaused = false
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    override public init() {
+        super.init()
+    }
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         activeWeather = Weather.savedChoice()
         statusMenu = StatusMenu(selection: activeWeather) { [weak self] weather in
             self?.choose(weather)

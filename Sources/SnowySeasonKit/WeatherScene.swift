@@ -3,10 +3,11 @@ import WeatherCore
 
 /// One screen's weather: particles fall from above the top edge and settle on window tops.
 @MainActor
-final class WeatherScene: SKScene {
+public final class WeatherScene: SKScene {
     private let style: WeatherStyle
     private let screenFrame: CGRect
-    private let tracker: WindowTracker
+    private let tracker: WindowLayout
+    private let pointerLocation: () -> CGPoint
     private lazy var piles = PileField(style: style, screenFrame: screenFrame, tracker: tracker, scene: self)
     private var falling: [Particle] = []
     private var seenTrackerRevision = -1
@@ -24,24 +25,31 @@ final class WeatherScene: SKScene {
     private static let pointerNudgeRadius: CGFloat = 60
     private static let pointerNudgeShare: CGFloat = 0.08
 
-    init(screenFrame: CGRect, style: WeatherStyle, tracker: WindowTracker) {
+    /// `pointerLocation` is in global AppKit coordinates.
+    public init(
+        screenFrame: CGRect,
+        style: WeatherStyle,
+        tracker: WindowLayout,
+        pointerLocation: @escaping () -> CGPoint = { NSEvent.mouseLocation }
+    ) {
         self.style = style
         self.screenFrame = screenFrame
         self.tracker = tracker
+        self.pointerLocation = pointerLocation
         super.init(size: screenFrame.size)
         backgroundColor = .clear
         scaleMode = .resizeFill
     }
 
-    required init?(coder: NSCoder) {
+    public required init?(coder: NSCoder) {
         fatalError("WeatherScene is only created in code")
     }
 
-    override func didMove(to view: SKView) {
+    override public func didMove(to view: SKView) {
         prefillSky()
     }
 
-    override func update(_ currentTime: TimeInterval) {
+    override public func update(_ currentTime: TimeInterval) {
         let frameDuration = CGFloat(currentTime - (lastFrameTime ?? currentTime))
         let elapsed = min(frameDuration, Self.maxFrameStep)
         lastFrameTime = currentTime
@@ -130,7 +138,7 @@ final class WeatherScene: SKScene {
     /// `elapsed` is the real time since the last frame: after a hitch or a pause, the pointer's
     /// travel can't be turned into a speed, so that frame only records where it is.
     private func sweepWithPointer(over elapsed: CGFloat) {
-        let mouse = NSEvent.mouseLocation
+        let mouse = pointerLocation()
         let pointer = CGPoint(x: mouse.x - screenFrame.minX, y: mouse.y - screenFrame.minY)
         defer { previousPointer = pointer }
         guard let previous = previousPointer, elapsed > 0, elapsed <= Self.maxFrameStep else { return }

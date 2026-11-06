@@ -6,13 +6,13 @@ import WeatherCore
 final class PileField {
     private let style: WeatherStyle
     private let screenFrame: CGRect
-    private let tracker: WindowTracker
+    private let tracker: WindowLayout
     private unowned let scene: SKNode
     private var piles: [CGWindowID: Pile] = [:]
     /// Visible window top edges on this screen, in scene coordinates.
     private var surfaces: [CGWindowID: WindowSurface] = [:]
 
-    init(style: WeatherStyle, screenFrame: CGRect, tracker: WindowTracker, scene: SKNode) {
+    init(style: WeatherStyle, screenFrame: CGRect, tracker: WindowLayout, scene: SKNode) {
         self.style = style
         self.screenFrame = screenFrame
         self.tracker = tracker
@@ -46,7 +46,7 @@ final class PileField {
         for surface in surfaces.values where surface.spans.contains(where: { $0.contains(position.x) }) {
             let landingHeight = surface.top + (piles[surface.windowID]?.height(atX: position.x) ?? 0)
             guard previous.y >= landingHeight, position.y < landingHeight else { continue }
-            guard !tracker.isBeingMoved(surface.windowID, now: CACurrentMediaTime()),
+            guard !tracker.isBeingMoved(surface.windowID),
                   let pile = pile(on: surface)
             else { return false }
             pile.receive(particle)
@@ -86,7 +86,7 @@ final class PileField {
         let top = surface.top - screenFrame.minY
         // A pile on an edge this close to the top of the screen would be drawn off-screen,
         // and the edge would catch particles the moment they spawn.
-        guard top > 0, top <= screenFrame.height - WindowTracker.pileClearance else { return nil }
+        guard top > 0, top <= screenFrame.height - pileClearance else { return nil }
         let screenWidth = Span(0, screenFrame.width)
         let spans = surface.spans.compactMap { $0.shifted(by: -screenFrame.minX).clamped(to: screenWidth) }
         guard !spans.isEmpty else { return nil }

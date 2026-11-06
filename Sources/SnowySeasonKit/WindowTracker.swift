@@ -2,26 +2,14 @@ import AppKit
 import OSLog
 import WeatherCore
 
-struct TrackedWindow {
-    let id: CGWindowID
-    /// Global AppKit coordinates (y up, origin at the primary screen's bottom-left).
-    let frame: CGRect
-    /// Points per second of the top edge; zero once it stops moving.
-    let velocity: CGVector
-    let lastMovedAt: TimeInterval
-}
-
 /// Polls the on-screen window list so weather knows where window tops are and when a window is dragged.
 /// Reading frames from CGWindowList needs no Screen Recording permission; only window titles would.
 @MainActor
-final class WindowTracker {
+final class WindowTracker: WindowLayout {
     private(set) var windows: [CGWindowID: TrackedWindow] = [:]
     private(set) var surfaces: [WindowSurface] = []
-    /// Bumped whenever window frames or stacking order change.
     private(set) var revision = 0
 
-    /// How far above a window's top edge a pile can reach; a window covering that band hides the edge.
-    static let pileClearance: CGFloat = 24
     private static let pollInterval: TimeInterval = 1.0 / 30
     /// A window counts as being dragged until it has stayed put this long.
     private static let settleDelay: TimeInterval = 0.25
@@ -49,9 +37,9 @@ final class WindowTracker {
         timer = nil
     }
 
-    func isBeingMoved(_ id: CGWindowID, now: TimeInterval) -> Bool {
+    func isBeingMoved(_ id: CGWindowID) -> Bool {
         guard let window = windows[id] else { return false }
-        return now - window.lastMovedAt < Self.settleDelay
+        return CACurrentMediaTime() - window.lastMovedAt < Self.settleDelay
     }
 
     private func poll() {
@@ -66,7 +54,7 @@ final class WindowTracker {
         windows = tracked
         guard current != stackingOrder else { return }
         stackingOrder = current
-        surfaces = visibleTopSurfaces(of: current, clearance: Self.pileClearance)
+        surfaces = visibleTopSurfaces(of: current, clearance: pileClearance)
         revision += 1
     }
 

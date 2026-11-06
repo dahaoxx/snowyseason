@@ -23,6 +23,9 @@ public struct WindowSurface: Equatable {
     }
 }
 
+/// How far above a window's top edge a pile can reach; a window covering that band hides the edge.
+public let pileClearance: CGFloat = 24
+
 /// `windows` must be ordered front-to-back, in y-up coordinates. A window in front hides an
 /// edge if it covers the edge itself or the `clearance` band above it, where a pile would sit.
 public func visibleTopSurfaces(of windows: [WindowFrame], clearance: CGFloat, minimumSpan: CGFloat = 8) -> [WindowSurface] {

@@ -1,7 +1,7 @@
 import SpriteKit
 
 /// Everything that makes snow look and behave like snow, or leaves like leaves.
-struct WeatherStyle {
+public struct WeatherStyle {
     enum PileLook {
         /// Flakes melt into one smooth white drift.
         case snowDrift
@@ -33,7 +33,7 @@ struct WeatherStyle {
     let pileBinWidth: CGFloat
     let isSweptByPointer: Bool
 
-    static let snow = WeatherStyle(
+    public static let snow = WeatherStyle(
         textures: SnowflakeTextures.all,
         spawnRatePer1000Points: 90,
         maxFalling: 700,
@@ -55,7 +55,7 @@ struct WeatherStyle {
         isSweptByPointer: false
     )
 
-    static let autumnLeaves = WeatherStyle(
+    public static let autumnLeaves = WeatherStyle(
         textures: LeafTextures.all,
         spawnRatePer1000Points: 3.5,
         maxFalling: 50,

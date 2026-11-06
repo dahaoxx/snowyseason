@@ -20,6 +20,12 @@ stdenv.mkDerivation {
     ];
   };
 
+  # The demo recorder isn't part of the app.
+  swiftpmFlags = [
+    "--product"
+    "SnowySeason"
+  ];
+
   nativeBuildInputs = [
     swift
     swiftpm

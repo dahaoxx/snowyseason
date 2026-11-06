@@ -1,4 +1,5 @@
 import AppKit
+import SnowySeasonKit
 
 MainActor.assumeIsolated {
     let app = NSApplication.shared

@@ -2,6 +2,8 @@
 
 Snow and autumn leaves that fall across your Mac desktop and settle on top of your windows.
 
+![Snow builds drifts on two windows and flies off when one is dragged; then autumn leaves pile up and get brushed away by the pointer](docs/demo.gif)
+
 - **Snow** builds up into drifts along window tops. Drag a window and the snow flies off.
 - **Autumn leaves** tumble down and pile up on windows. Sweep them away with a quick flick of the pointer.
 
@@ -33,5 +35,6 @@ swift test
 ```
 
 - `Sources/WeatherCore`: pure geometry and pile physics, covered by the tests.
-- `Sources/SnowySeason`: the app (menu, overlay windows, window tracking, SpriteKit scene).
+- `Sources/SnowySeasonKit`: the app (menu, overlay windows, window tracking, SpriteKit scene); `Sources/SnowySeason` just launches it.
 - `nix/package.nix`: builds the `.app` bundle with nixpkgs' Swift toolchain.
+- `Sources/DemoRecorder`: renders `docs/demo.gif` offscreen, with scripted stand-in windows instead of a screen recording. Regenerate it with `swift run -c release DemoRecorder`.
