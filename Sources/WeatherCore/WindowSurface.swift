@@ -23,6 +23,17 @@ public struct WindowSurface: Equatable {
     }
 }
 
+extension WindowSurface {
+    /// This surface in the coordinates of the screen at `screenFrame`, cut to that screen's width.
+    /// Nil if none of it is on that screen's width.
+    public func local(to screenFrame: CGRect) -> WindowSurface? {
+        let screenWidth = Span(0, screenFrame.width)
+        let spans = spans.compactMap { $0.shifted(by: -screenFrame.minX).clamped(to: screenWidth) }
+        guard !spans.isEmpty else { return nil }
+        return WindowSurface(windowID: windowID, top: top - screenFrame.minY, spans: spans)
+    }
+}
+
 /// How far above a window's top edge a pile can reach; a window covering that band hides the edge.
 public let pileClearance: CGFloat = 24
 

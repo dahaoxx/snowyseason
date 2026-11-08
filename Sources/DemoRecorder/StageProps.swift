@@ -49,14 +49,14 @@ enum StageProps {
         return window
     }
 
-    static func caption(_ text: String) -> SKLabelNode {
+    static func caption(_ text: String, atTop: Bool, canvasHeight: CGFloat) -> SKLabelNode {
         let label = SKLabelNode(text: text)
         label.fontName = NSFont.systemFont(ofSize: 18, weight: .semibold).fontName
         label.fontSize = 18
         label.fontColor = NSColor(white: 1, alpha: 0.85)
         label.horizontalAlignmentMode = .left
-        label.verticalAlignmentMode = .bottom
-        label.position = CGPoint(x: 24, y: 20)
+        label.verticalAlignmentMode = atTop ? .top : .bottom
+        label.position = CGPoint(x: 24, y: atTop ? canvasHeight - 20 : 20)
         label.zPosition = pointerZ
         return label
     }

@@ -1,13 +1,16 @@
 import Foundation
 
-enum Weather: String, CaseIterable {
+/// What the menu bar item puts on screen.
+enum Mode: String, CaseIterable {
     case snow
     case autumnLeaves
+    case cat
 
     var menuTitle: String {
         switch self {
         case .snow: "Snow"
         case .autumnLeaves: "Autumn Leaves"
+        case .cat: "Cat"
         }
     }
 
@@ -15,28 +18,23 @@ enum Weather: String, CaseIterable {
         switch self {
         case .snow: "snowflake"
         case .autumnLeaves: "leaf"
-        }
-    }
-
-    var style: WeatherStyle {
-        switch self {
-        case .snow: .snow
-        case .autumnLeaves: .autumnLeaves
+        case .cat: "cat"
         }
     }
 }
 
-extension Weather {
+extension Mode {
+    /// Named from when the menu only offered weather; kept so an earlier choice survives updates.
     private static let defaultsKey = "weather"
     private static let offValue = "off"
 
-    /// Snow on first launch; nil when the user turned weather off.
-    static func savedChoice() -> Weather? {
+    /// Snow on first launch; nil when the user turned it off.
+    static func savedChoice() -> Mode? {
         guard let saved = UserDefaults.standard.string(forKey: defaultsKey) else { return .snow }
-        return Weather(rawValue: saved)
+        return Mode(rawValue: saved)
     }
 
-    static func saveChoice(_ weather: Weather?) {
-        UserDefaults.standard.set(weather?.rawValue ?? offValue, forKey: defaultsKey)
+    static func saveChoice(_ mode: Mode?) {
+        UserDefaults.standard.set(mode?.rawValue ?? offValue, forKey: defaultsKey)
     }
 }

@@ -1,20 +1,20 @@
 import AppKit
 
-/// The menu bar icon and its menu for picking the weather.
+/// The menu bar icon and its menu for picking what to show.
 @MainActor
 final class StatusMenu: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    private let onChoose: (Weather?) -> Void
-    private var choices: [(weather: Weather?, item: NSMenuItem)] = []
+    private let onChoose: (Mode?) -> Void
+    private var choices: [(mode: Mode?, item: NSMenuItem)] = []
 
     private static let offSymbolName = "cloud"
 
-    init(selection: Weather?, onChoose: @escaping (Weather?) -> Void) {
+    init(selection: Mode?, onChoose: @escaping (Mode?) -> Void) {
         self.onChoose = onChoose
         super.init()
         let menu = NSMenu()
-        for weather in Weather.allCases {
-            addChoice(weather, title: weather.menuTitle, to: menu)
+        for mode in Mode.allCases {
+            addChoice(mode, title: mode.menuTitle, to: menu)
         }
         addChoice(nil, title: "Off", to: menu)
         menu.addItem(.separator())
@@ -25,26 +25,26 @@ final class StatusMenu: NSObject {
         show(selection: selection)
     }
 
-    func show(selection: Weather?) {
+    func show(selection: Mode?) {
         for choice in choices {
-            choice.item.state = choice.weather == selection ? .on : .off
+            choice.item.state = choice.mode == selection ? .on : .off
         }
         let symbol = selection?.symbolName ?? Self.offSymbolName
         statusItem.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Snowy Season")
     }
 
-    private func addChoice(_ weather: Weather?, title: String, to menu: NSMenu) {
+    private func addChoice(_ mode: Mode?, title: String, to menu: NSMenu) {
         let item = NSMenuItem(title: title, action: #selector(choose(_:)), keyEquivalent: "")
         item.target = self
         menu.addItem(item)
-        choices.append((weather, item))
+        choices.append((mode, item))
     }
 
     @objc private func choose(_ sender: NSMenuItem) {
         guard let choice = choices.first(where: { $0.item === sender }) else {
-            assertionFailure("Menu item \(sender.title) is not a weather choice")
+            assertionFailure("Menu item \(sender.title) is not a mode choice")
             return
         }
-        onChoose(choice.weather)
+        onChoose(choice.mode)
     }
 }

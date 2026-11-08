@@ -83,13 +83,10 @@ final class PileField {
     }
 
     private func onScreenSurface(_ surface: WindowSurface) -> WindowSurface? {
-        let top = surface.top - screenFrame.minY
         // A pile on an edge this close to the top of the screen would be drawn off-screen,
         // and the edge would catch particles the moment they spawn.
-        guard top > 0, top <= screenFrame.height - pileClearance else { return nil }
-        let screenWidth = Span(0, screenFrame.width)
-        let spans = surface.spans.compactMap { $0.shifted(by: -screenFrame.minX).clamped(to: screenWidth) }
-        guard !spans.isEmpty else { return nil }
-        return WindowSurface(windowID: surface.windowID, top: top, spans: spans)
+        guard let local = surface.local(to: screenFrame), local.top > 0, local.top <= screenFrame.height - pileClearance
+        else { return nil }
+        return local
     }
 }
