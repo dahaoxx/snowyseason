@@ -15,8 +15,6 @@ struct PointerSample {
 @MainActor
 final class Cat {
     static let agility = Agility(leapUp: 230, leapDown: 1600, leapAcross: 200, footprint: 22, hop: 34, minimumClimb: 70)
-    /// Room the cat needs above a ledge to sit up, ears included.
-    static let headroom: CGFloat = 50
 
     let layer = SKNode()
     private let figure = CatFigure()
@@ -145,13 +143,14 @@ final class Cat {
             blinkUntil = clock + 0.14
             nextBlinkAt = clock + roll(2.5...6)
         }
-        figure.position = position
-        figure.xScale = facing
         if case .clinging(_, let inward, _) = footing {
-            figure.zRotation = inward * .pi / 2
+            facing = grip(onWallAt: position.x, inward: inward, in: territory)
+            figure.zRotation = facing * .pi / 2
         } else {
             figure.zRotation = 0
         }
+        figure.position = position
+        figure.xScale = facing
         figure.show(pose(), elapsed: elapsed, time: clock)
     }
 
@@ -216,6 +215,13 @@ final class Cat {
         guard position.y >= frame.maxY - 4 else { return }
         position.y = min(position.y, frame.maxY)
         leap(to: CGPoint(x: wallX + inward * Self.agility.footprint, y: frame.maxY), clearance: 14)
+    }
+
+    /// Which way a climbing cat's paws push. Normally against the window's side, with its body
+    /// outside the window; at the edge of the screen there's no room outside, so it climbs just
+    /// inside the window with its paws on the screen's edge.
+    private func grip(onWallAt x: CGFloat, inward: CGFloat, in territory: CatTerritory) -> CGFloat {
+        territory.roamingRange.contains(x - inward * Self.agility.footprint) ? inward : -inward
     }
 
     private func fly(by elapsed: CGFloat, velocity: CGVector, startled: Bool, grab: WallGrab?, in territory: CatTerritory) {
@@ -395,7 +401,7 @@ final class Cat {
         case .leap:
             if abs(route.arrival.x - position.x) > 2 { facing = route.arrival.x > position.x ? 1 : -1 }
         case .climb(let wall):
-            facing = wall.inward
+            facing = abs(wall.x - position.x) > 2 ? (wall.x > position.x ? 1 : -1) : wall.inward
         }
         activity = .crouching(for: route, until: clock + Self.crouchTime)
     }

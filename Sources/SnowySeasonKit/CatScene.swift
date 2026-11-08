@@ -63,7 +63,6 @@ public final class CatScene: SKScene {
             layout: tracker,
             screenFrame: screenFrame,
             usableFrame: usableFrame,
-            headroom: Cat.headroom,
             footprint: Cat.agility.footprint
         )
     }

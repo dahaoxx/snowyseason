@@ -24,14 +24,17 @@ struct CatTerritory {
     static let floorOverhang: CGFloat = 80
     /// A window top this close to the floor is too low to be worth standing on.
     private static let minimumLedgeHeight: CGFloat = 30
+    /// Absorbs rounding between window frames and the screen's usable area.
+    private static let ceilingTolerance: CGFloat = 1
 
-    /// `headroom` is how much room the cat needs above a ledge; it never perches where it would
-    /// stick up into the menu bar.
-    init(layout: WindowLayout, screenFrame: CGRect, usableFrame: CGRect, headroom: CGFloat, footprint: CGFloat) {
+    /// Window tops up to the bottom of the menu bar are ledges, so the cat can sit on a maximized
+    /// window with its head over the menu bar. Anything higher is off screen, or belongs to a
+    /// full-screen app whose menu bar is hidden.
+    init(layout: WindowLayout, screenFrame: CGRect, usableFrame: CGRect, footprint: CGFloat) {
         size = screenFrame.size
         floor = usableFrame.minY - screenFrame.minY
         roamingRange = Span(footprint, size.width - footprint)
-        let ceiling = usableFrame.maxY - screenFrame.minY - headroom
+        let ceiling = usableFrame.maxY - screenFrame.minY + Self.ceilingTolerance
         windows = layout.windows.mapValues { window in
             TrackedWindow(
                 id: window.id,
