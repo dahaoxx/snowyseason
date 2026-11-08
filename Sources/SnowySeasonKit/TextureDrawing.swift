@@ -1,8 +1,12 @@
 import SpriteKit
 
-/// Draws a texture in code. `size` is in points; pixels are doubled so it stays sharp on Retina.
+/// Pixels per point in drawn textures, so they stay sharp on Retina.
+let textureScale: CGFloat = 2
+
+/// Draws a texture in code. `size` is in points. SpriteKit sizes a sprite by the texture's pixels,
+/// so give the sprite `pointSize(of:)` rather than its texture's own size.
 func drawTexture(size: CGSize, draw: (CGContext) -> Void) -> SKTexture {
-    let scale: CGFloat = 2
+    let scale = textureScale
     guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
           let context = CGContext(
               data: nil,
@@ -27,4 +31,8 @@ func makeGradient(_ colors: [CGColor], locations: [CGFloat]) -> CGGradient {
           let gradient = CGGradient(colorsSpace: colorSpace, colors: colors as CFArray, locations: locations)
     else { preconditionFailure("Could not create gradient with \(colors.count) colors") }
     return gradient
+}
+
+func pointSize(of texture: SKTexture) -> CGSize {
+    CGSize(width: texture.size().width / textureScale, height: texture.size().height / textureScale)
 }

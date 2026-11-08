@@ -76,3 +76,99 @@ import Testing
     #expect(map[5] == 0)
     #expect(map[4] > 0)
 }
+
+@Test func surfaceIsMovedIntoScreenCoordinatesAndCutToItsWidth() {
+    let surface = WindowSurface(windowID: 3, top: 900, spans: [Span(1400, 1700), Span(2500, 2600)])
+    let local = surface.local(to: CGRect(x: 1440, y: 100, width: 1000, height: 800))
+    #expect(local == WindowSurface(windowID: 3, top: 800, spans: [Span(0, 260)]))
+    #expect(surface.local(to: CGRect(x: 0, y: 0, width: 1000, height: 800)) == nil)
+}
+
+@Test func spanInsetClampAndDistance() {
+    let span = Span(10, 50)
+    #expect(span.inset(by: 5) == Span(15, 45))
+    #expect(span.inset(by: 30) == nil)
+    #expect(span.clamp(70) == 50)
+    #expect(span.distance(to: 0) == 10)
+    #expect(span.distance(to: 30) == 0)
+}
+
+@Test(arguments: [
+    (CGPoint(x: 0, y: 0), CGPoint(x: 150, y: 200)),
+    (CGPoint(x: 300, y: 500), CGPoint(x: 260, y: 40)),
+    (CGPoint(x: 0, y: 100), CGPoint(x: 0, y: 100)),
+])
+func leapEndsWhereItWasAimed(start: CGPoint, end: CGPoint) {
+    let gravity: CGFloat = 2400
+    let leap = Leap(from: start, to: end, clearance: 25, gravity: gravity)
+    var position = start
+    var velocity = leap.launchVelocity
+    var highest = start.y
+    let frames = 37
+    for _ in 0..<frames {
+        (position, velocity) = ballisticStep(position: position, velocity: velocity, gravity: gravity, time: leap.duration / CGFloat(frames))
+        highest = max(highest, position.y)
+    }
+    #expect(abs(position.x - end.x) < 0.001)
+    #expect(abs(position.y - end.y) < 0.001)
+    #expect(abs(highest - (max(start.y, end.y) + 25)) < 1)
+}
+
+@Test func landingPicksTheHighestLedgePassedThrough() {
+    let ledges = [
+        WindowSurface(windowID: 1, top: 300, spans: [Span(0, 100)]),
+        WindowSurface(windowID: 2, top: 200, spans: [Span(0, 100)]),
+        WindowSurface(windowID: 3, top: 250, spans: [Span(200, 300)]),
+    ]
+    #expect(landing(on: ledges, atX: 50, droppingFrom: 400, to: 150)?.windowID == 1)
+    #expect(landing(on: ledges, atX: 50, droppingFrom: 290, to: 150)?.windowID == 2)
+    #expect(landing(on: ledges, atX: 150, droppingFrom: 400, to: 0) == nil)
+    #expect(landing(on: ledges, atX: 50, droppingFrom: 300, to: 300) == nil)
+}
+
+private let agility = Agility(leapUp: 200, leapDown: 1000, leapAcross: 150, footprint: 20, hop: 30, minimumClimb: 60)
+
+@Test func leapsReachLedgesWithinRangeOnly() {
+    let ledges = [
+        WindowSurface(windowID: 1, top: 150, spans: [Span(0, 400)]),
+        WindowSurface(windowID: 2, top: 400, spans: [Span(0, 400)]),
+        WindowSurface(windowID: 3, top: 100, spans: [Span(500, 800)]),
+        WindowSurface(windowID: 4, top: 100, spans: [Span(900, 1200)]),
+    ]
+    let found = routes(on: Span(0, 400), at: 100, standingOn: 9, from: 200, ledges: ledges, walls: [], agility: agility)
+    #expect(Set(found.map(\.ledgeID)) == [1, 3])
+}
+
+@Test func leapAcrossAGapTakesOffAtTheNearEdge() {
+    let ledges = [WindowSurface(windowID: 3, top: 120, spans: [Span(500, 800)])]
+    let found = routes(on: Span(0, 400), at: 100, standingOn: 9, from: 50, ledges: ledges, walls: [], agility: agility)
+    #expect(found == [Route(move: .leap, ledgeID: 3, takeoffX: 380, arrival: CGPoint(x: 520, y: 120))])
+}
+
+@Test func leapOntoLedgeOverheadStartsUnderneathIt() {
+    let ledges = [WindowSurface(windowID: 1, top: 250, spans: [Span(300, 700)])]
+    let found = routes(on: Span(0, 1000), at: 100, standingOn: 0, from: 100, ledges: ledges, walls: [], agility: agility)
+    #expect(found == [Route(move: .leap, ledgeID: 1, takeoffX: 320, arrival: CGPoint(x: 350, y: 250))])
+}
+
+@Test func tallWindowIsClimbedToACornerInView() {
+    let window = WindowFrame(id: 5, frame: CGRect(x: 300, y: 80, width: 400, height: 520))
+    let ledges = [WindowSurface(windowID: 5, top: 600, spans: [Span(300, 600)])]
+    let found = routes(on: Span(0, 1000), at: 100, standingOn: 0, from: 100, ledges: ledges, walls: Wall.sides(of: window), agility: agility)
+    let left = Wall(windowID: 5, x: 300, bottom: 80, top: 600, inward: 1)
+    // The right-hand corner is hidden, so only the left wall leads anywhere.
+    #expect(found == [Route(move: .climb(left), ledgeID: 5, takeoffX: 280, arrival: CGPoint(x: 320, y: 600))])
+}
+
+@Test func wallStartingOutOfReachIsNotClimbed() {
+    let window = WindowFrame(id: 5, frame: CGRect(x: 300, y: 400, width: 400, height: 300))
+    let ledges = [WindowSurface(windowID: 5, top: 700, spans: [Span(300, 700)])]
+    let found = routes(on: Span(0, 1000), at: 100, standingOn: 0, from: 100, ledges: ledges, walls: Wall.sides(of: window), agility: agility)
+    #expect(found.isEmpty)
+}
+
+@Test func ownLedgeIsNeverARoute() {
+    let ledges = [WindowSurface(windowID: 1, top: 100, spans: [Span(0, 400)])]
+    let window = WindowFrame(id: 1, frame: CGRect(x: 0, y: 0, width: 400, height: 100))
+    #expect(routes(on: Span(0, 400), at: 100, standingOn: 1, from: 50, ledges: ledges, walls: Wall.sides(of: window), agility: agility).isEmpty)
+}

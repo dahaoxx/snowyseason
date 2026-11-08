@@ -11,6 +11,10 @@ final class ScriptedWindows: WindowLayout {
         let size: CGSize
         /// Bottom-left corner over time.
         let origin: Keyframes
+        /// Clip time the window appears, as if an app just opened it.
+        var opensAt: TimeInterval = 0
+
+        func isOpen(at time: TimeInterval) -> Bool { time >= opensAt }
     }
 
     private(set) var windows: [CGWindowID: TrackedWindow] = [:]
@@ -34,8 +38,8 @@ final class ScriptedWindows: WindowLayout {
     func advance(to time: TimeInterval) {
         let elapsed = time - now
         now = time
-        let frames = scripts.map { WindowFrame(id: $0.id, frame: frame(of: $0)) }
-        var hasChanged = windows.isEmpty
+        let frames = scripts.filter { $0.isOpen(at: time) }.map { WindowFrame(id: $0.id, frame: frame(of: $0)) }
+        var hasChanged = windows.isEmpty || frames.count != windows.count
         for window in frames {
             let previous = windows[window.id]
             let hasMoved = previous.map { !$0.frame.hasSameTopEdge(as: window.frame) } ?? false

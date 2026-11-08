@@ -20,6 +20,18 @@ public struct Span: Equatable {
     }
 
     public func shifted(by offset: CGFloat) -> Span { Span(lower + offset, upper + offset) }
+
+    /// Pulled in by `amount` at both ends; nil if nothing is left.
+    public func inset(by amount: CGFloat) -> Span? {
+        let inner = Span(lower + amount, upper - amount)
+        return inner.length >= 0 ? inner : nil
+    }
+
+    /// The nearest x within the span.
+    public func clamp(_ x: CGFloat) -> CGFloat { min(max(x, lower), upper) }
+
+    /// How far `x` is outside the span; zero inside it.
+    public func distance(to x: CGFloat) -> CGFloat { abs(x - clamp(x)) }
 }
 
 public func subtracting(_ cut: Span, from spans: [Span]) -> [Span] {

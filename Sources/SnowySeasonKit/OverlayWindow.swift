@@ -1,28 +1,28 @@
 import AppKit
 import SpriteKit
 
-/// A transparent, click-through window covering one screen, where the weather is drawn.
+/// A transparent, click-through window covering one screen, where the snow, leaves or cat are drawn.
 @MainActor
 final class OverlayWindow: NSWindow {
-    let weatherView: SKView
+    let sceneView: SKView
 
     init(screen: NSScreen, scene: SKScene) {
-        weatherView = SKView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        sceneView = SKView(frame: NSRect(origin: .zero, size: screen.frame.size))
         super.init(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
         ignoresMouseEvents = true
         isReleasedWhenClosed = false
-        // Above the Dock so weather falls in front of it; clicks still pass through.
+        // Above the Dock so snow falls and the cat walks in front of it; clicks still pass through.
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
 
-        weatherView.allowsTransparency = true
-        weatherView.ignoresSiblingOrder = true
-        weatherView.preferredFramesPerSecond = 60
-        weatherView.presentScene(scene)
-        contentView = weatherView
+        sceneView.allowsTransparency = true
+        sceneView.ignoresSiblingOrder = true
+        sceneView.preferredFramesPerSecond = 60
+        sceneView.presentScene(scene)
+        contentView = sceneView
         setFrame(screen.frame, display: false)
     }
 
