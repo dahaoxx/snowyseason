@@ -83,7 +83,7 @@ public struct Agility {
 public struct Route: Equatable {
     public enum Move: Equatable {
         case leap
-        /// Get onto the wall (jumping up to it if it starts above the cat), climb, and step onto the top.
+        /// Spring onto the wall, climb it in bounds, and haul over onto the top.
         case climb(Wall)
     }
 

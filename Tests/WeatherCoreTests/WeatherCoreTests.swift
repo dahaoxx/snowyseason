@@ -172,3 +172,55 @@ private let agility = Agility(leapUp: 200, leapDown: 1000, leapAcross: 150, foot
     let window = WindowFrame(id: 1, frame: CGRect(x: 0, y: 0, width: 400, height: 100))
     #expect(routes(on: Span(0, 400), at: 100, standingOn: 1, from: 50, ledges: ledges, walls: Wall.sides(of: window), agility: agility).isEmpty)
 }
+
+private let gait = ClimbingGait(boundLength: 30, freshRate: 3.6, tiredRate: 2.6, stamina: 300, surge: 0.85)
+
+@Test func everyWholeBoundGainsOneBoundLength() {
+    #expect(abs(gait.rise(from: 0.37, by: 3) - 90) < 0.001)
+}
+
+@Test func climbRisesTheSameHoweverFramesAreSliced() {
+    var cycle: CGFloat = 0.2
+    var climbed: CGFloat = 0
+    let frames = 53
+    for _ in 0..<frames {
+        climbed += gait.rise(from: cycle, by: 1.7 / CGFloat(frames))
+        cycle += 1.7 / CGFloat(frames)
+    }
+    #expect(abs(climbed - gait.rise(from: 0.2, by: 1.7)) < 0.001)
+}
+
+@Test func climbSurgesOnThePushAndHangsBetween() {
+    let push = gait.rise(from: -0.05, by: 0.1)
+    let between = gait.rise(from: 0.45, by: 0.1)
+    #expect(between >= 0)
+    #expect(push > between * 5)
+}
+
+@Test func climberTiresWithHeight() {
+    #expect(gait.rate(afterClimbing: 0) == 3.6)
+    #expect(gait.rate(afterClimbing: 150) < 3.6)
+    #expect(gait.rate(afterClimbing: 150) > 2.6)
+    #expect(gait.rate(afterClimbing: 5000) == 2.6)
+}
+
+@Test func mantleRunsFromHangingUprightToStandingLevel() {
+    let mantle = Mantle(from: CGPoint(x: 300, y: 580), to: CGPoint(x: 320, y: 600))
+    #expect(mantle.point(at: 0) == CGPoint(x: 300, y: 580))
+    #expect(mantle.point(at: 1) == CGPoint(x: 320, y: 600))
+    #expect(mantle.uprightness(at: 0) == 1)
+    #expect(mantle.uprightness(at: 1) == 0)
+}
+
+@Test func mantleKeepsTheFeetOnTheSideUntilNearlyAtTheTop() {
+    let mantle = Mantle(from: CGPoint(x: 300, y: 500), to: CGPoint(x: 320, y: 600))
+    for step in 0...100 {
+        let point = mantle.point(at: CGFloat(step) / 100)
+        if point.x - 300 > 2 { #expect(600 - point.y < 20) }
+    }
+}
+
+@Test func mantleFollowsAMovedWindow() {
+    let mantle = Mantle(from: CGPoint(x: 300, y: 580), to: CGPoint(x: 320, y: 600)).offset(by: CGVector(dx: -40, dy: 15))
+    #expect(mantle == Mantle(from: CGPoint(x: 260, y: 595), to: CGPoint(x: 280, y: 615)))
+}
