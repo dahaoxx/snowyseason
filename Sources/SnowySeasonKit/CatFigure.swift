@@ -14,6 +14,9 @@ struct CatPose {
     var hindLegs: CGFloat = 0
     /// Leg swing while walking or climbing.
     var stride: CGFloat = 0
+    /// 0 walks, stepping in diagonal pairs; 1 bounds, as up a wall: hind legs push together while
+    /// the front paws reach, and the body stretches and gathers with each stride.
+    var bounding: CGFloat = 0
     /// Lifts the near front paw toward `pawAngle`, for grooming or swatting.
     var pawRaise: CGFloat = 0
     var pawAngle: CGFloat = 2.4
@@ -34,7 +37,7 @@ struct CatPose {
         }
         var result = target
         for keyPath: WritableKeyPath<CatPose, CGFloat> in [
-            \.bodyTilt, \.bodyHeight, \.bodyStretch, \.breathing, \.frontLegs, \.hindLegs, \.stride, \.pawRaise,
+            \.bodyTilt, \.bodyHeight, \.bodyStretch, \.breathing, \.frontLegs, \.hindLegs, \.stride, \.bounding, \.pawRaise,
             \.pawAngle, \.headLift, \.neckDrop, \.tailAngle, \.tailCurl, \.tailSway, \.tailPuff,
         ] {
             result[keyPath: keyPath] = mix(keyPath)
@@ -59,6 +62,9 @@ final class CatFigure: SKNode {
     private static let farLegShade: CGFloat = 0.35
     /// How quickly the pose catches up with its target, per second.
     private static let poseResponse: CGFloat = 11
+    /// In a bound the far paw lands a moment after the near one, front and back.
+    private static let boundStagger = (front: CGFloat(0.55), hind: CGFloat(0.25))
+    private static let boundStretch: CGFloat = 0.14
 
     private let body = CatFigure.sprite(CatTextures.body)
     private let neck = SKNode()
@@ -120,23 +126,38 @@ final class CatFigure: SKNode {
         gaitPhase += distance / Self.legLength * 0.9
     }
 
+    /// Where the legs are in their stride, in whole strides.
+    var gaitCycle: CGFloat { gaitPhase / (2 * .pi) }
+
+    func advanceGait(cycles: CGFloat) {
+        gaitPhase += cycles * 2 * .pi
+    }
+
+    func startGait(atCycle cycle: CGFloat) {
+        gaitPhase = cycle * 2 * .pi
+    }
+
     func show(_ target: CatPose, elapsed: CGFloat, time: CGFloat) {
         pose = pose.blended(toward: target, by: 1 - exp(-Self.poseResponse * elapsed))
         head.texture = pose.eyesClosed ? CatTextures.headEyesClosed : CatTextures.headEyesOpen
 
         body.zRotation = pose.bodyTilt
         body.position = CGPoint(x: 0, y: pose.bodyHeight)
-        body.xScale = pose.bodyStretch
+        // Stretched as the hind legs finish their push, gathered as they come back under.
+        body.xScale = pose.bodyStretch * (1 + Self.boundStretch * pose.bounding * pose.stride * sin(gaitPhase))
         body.yScale = 1 + pose.breathing * sin(time * 2.4)
 
-        // Paws step in diagonal pairs: near front with far hind, far front with near hind.
+        // Walking, paws step in diagonal pairs: near front with far hind, far front with near hind.
+        // Bounding, the far legs swing with their near partners instead, a little behind.
         let swing = pose.stride * sin(gaitPhase)
+        let farFrontSwing = pose.stride * sin(gaitPhase - Self.boundStagger.front)
+        let farHindSwing = pose.stride * sin(gaitPhase - Self.boundStagger.hind)
         place(nearFront, hip: Self.frontHip, angle: pose.frontLegs + swing, raise: pose.pawRaise)
         // A raised paw comes out in front of the chest.
         nearFront.zPosition = pose.pawRaise > 0.3 ? 0.2 : -0.1
-        place(farFront, hip: Self.frontHip, angle: pose.frontLegs - swing, raise: 0)
+        place(farFront, hip: Self.frontHip, angle: pose.frontLegs + mix(-swing, farFrontSwing, by: pose.bounding), raise: 0)
         place(nearHind, hip: Self.hindHip, angle: pose.hindLegs - swing, raise: 0)
-        place(farHind, hip: Self.hindHip, angle: pose.hindLegs + swing, raise: 0)
+        place(farHind, hip: Self.hindHip, angle: pose.hindLegs + mix(swing, -farHindSwing, by: pose.bounding), raise: 0)
 
         neck.position = CGPoint(x: Self.neckBase.x, y: Self.neckBase.y - pose.neckDrop)
         neck.zRotation = pose.headLift - pose.bodyTilt * 0.85
@@ -150,6 +171,10 @@ final class CatFigure: SKNode {
         let reach = min(max(hipHeight / Self.legLength, 0.3), 1.9)
         leg.yScale = reach + (0.85 - reach) * raise
         leg.zRotation = angle + (pose.pawAngle - angle) * raise - pose.bodyTilt
+    }
+
+    private func mix(_ from: CGFloat, _ to: CGFloat, by fraction: CGFloat) -> CGFloat {
+        from + (to - from) * fraction
     }
 
     private func poseTail(time: CGFloat) {

@@ -41,10 +41,26 @@ final class Cat {
     private var gaze: CGFloat = 0
     private var pace: Pace = .stroll
     private var isStepping = false
+    /// The figure's turn from level, eased so it swings rather than snaps onto and off a wall.
+    private var pitch: CGFloat = 0
+    /// While clinging: hanging still until then, having just hit the wall or stopping to get a better grip.
+    private var holdUntil: CGFloat = 0
+    private var isCatching = false
 
     private static let gravity: CGFloat = 2400
     nonisolated private static let leapClearance: CGFloat = 28
-    private static let climbSpeed: CGFloat = 120
+    private static let climbing = ClimbingGait(boundLength: 30, freshRate: 3.6, tiredRate: 2.8, stamina: 320, surge: 0.85)
+    /// How far up the side a cat on the ground springs before its claws catch.
+    private static let wallSpring: CGFloat = 55
+    private static let catchTime: CGFloat = 0.12
+    /// Once tired, the chance of stopping to re-grip at the end of each bound.
+    private static let regripChance: CGFloat = 0.18
+    /// Front paws reach the top of the side when the cat's body is this far below it.
+    private static let mantleReach: CGFloat = 24
+    private static let mantleTime: CGFloat = 0.42
+    /// Hind-leg scrabbles per second while hauling over the top.
+    private static let scrabbleRate: CGFloat = 4.5
+    private static let pitchResponse: CGFloat = 22
     private static let crouchTime: CGFloat = 0.28
     /// A window dragged faster than this throws the cat off instead of carrying it.
     private static let flingSpeed: CGFloat = 1100
@@ -68,8 +84,10 @@ final class Cat {
     private enum Footing {
         /// On a ledge. `frame` is where its window was last frame, so the cat rides along when it moves.
         case standing(on: CGWindowID, frame: CGRect?)
-        /// Climbing a window's side; `inward` says which side, as for `Wall`.
-        case clinging(to: CGWindowID, inward: CGFloat, frame: CGRect)
+        /// Climbing a window's side; `inward` says which side, as for `Wall`. `climbed` tires it.
+        case clinging(to: CGWindowID, inward: CGFloat, frame: CGRect, climbed: CGFloat)
+        /// Hauling itself over the top of the side it climbed.
+        case mantling(onto: CGWindowID, frame: CGRect, mantle: Mantle, progress: CGFloat)
         /// Leaping or falling. With `grab`, the leap ends on a wall rather than a ledge.
         case airborne(velocity: CGVector, startled: Bool, grab: WallGrab?)
     }
@@ -77,7 +95,11 @@ final class Cat {
     private struct WallGrab {
         let windowID: CGWindowID
         let inward: CGFloat
-        var timeLeft: CGFloat
+        var duration: CGFloat = 0
+        var timeLeft: CGFloat = 0
+
+        /// How far through the leap the cat is, from 0 at takeoff to 1 as its claws catch.
+        var progress: CGFloat { duration > 0 ? 1 - timeLeft / duration : 1 }
     }
 
     private enum Pace {
@@ -129,7 +151,10 @@ final class Cat {
         isStepping = false
         switch footing {
         case .standing(let id, let frame): keepFooting(on: id, lastFrame: frame, in: territory)
-        case .clinging(let id, let inward, let frame): climb(id, inward: inward, lastFrame: frame, by: elapsed, in: territory)
+        case .clinging(let id, let inward, let frame, let climbed):
+            climb(id, inward: inward, lastFrame: frame, climbed: climbed, by: elapsed, in: territory)
+        case .mantling(let id, let frame, let mantle, let progress):
+            haul(onto: id, lastFrame: frame, mantle: mantle, progress: progress, by: elapsed, in: territory)
         case .airborne(let velocity, let startled, let grab): fly(by: elapsed, velocity: velocity, startled: startled, grab: grab, in: territory)
         }
         if case .standing = footing {
@@ -143,12 +168,18 @@ final class Cat {
             blinkUntil = clock + 0.14
             nextBlinkAt = clock + roll(2.5...6)
         }
-        if case .clinging(_, let inward, _) = footing {
+        if case .clinging(_, let inward, _, _) = footing {
             facing = grip(onWallAt: position.x, inward: inward, in: territory)
-            figure.zRotation = facing * .pi / 2
-        } else {
-            figure.zRotation = 0
         }
+        let upright: CGFloat = switch footing {
+        case .clinging: 1
+        case .mantling(_, _, let mantle, let progress): mantle.uprightness(at: progress)
+        // Pitching up through the leap, so it meets the wall paws first.
+        case .airborne(_, _, let grab?): smoothstep(grab.progress * 1.25)
+        case .airborne, .standing: 0
+        }
+        pitch += (facing * upright * .pi / 2 - pitch) * (1 - exp(-Self.pitchResponse * elapsed))
+        figure.zRotation = pitch
         figure.position = position
         figure.xScale = facing
         figure.show(pose(), elapsed: elapsed, time: clock)
@@ -202,19 +233,52 @@ final class Cat {
         }
     }
 
-    private func climb(_ id: CGWindowID, inward: CGFloat, lastFrame: CGRect, by elapsed: CGFloat, in territory: CatTerritory) {
+    private func climb(_ id: CGWindowID, inward: CGFloat, lastFrame: CGRect, climbed: CGFloat, by elapsed: CGFloat, in territory: CatTerritory) {
         guard let frame = territory.frame(of: id) else { return fall(startled: true) }
         let velocity = territory.velocity(of: id)
         if hypot(velocity.dx, velocity.dy) > Self.flingSpeed { return fling(by: velocity) }
         let wallX = inward > 0 ? frame.minX : frame.maxX
         position.x = wallX
-        position.y += frame.maxY - lastFrame.maxY + Self.climbSpeed * elapsed
-        figure.advanceGait(by: Self.climbSpeed * elapsed)
+        position.y += frame.maxY - lastFrame.maxY
+        var climbed = climbed
+        if clock >= holdUntil {
+            isCatching = false
+            let start = figure.gaitCycle
+            let cycles = Self.climbing.rate(afterClimbing: climbed) * elapsed
+            let rise = Self.climbing.rise(from: start, by: cycles)
+            figure.advanceGait(cycles: cycles)
+            position.y += rise
+            climbed += rise
+            isStepping = true
+            // Between bounds, where it hangs almost still anyway, a tired cat may stop to re-grip.
+            let finishedBound = (start - 0.5).rounded(.down) != (figure.gaitCycle - 0.5).rounded(.down)
+            if finishedBound, climbed > Self.climbing.stamina, chance(Self.regripChance) {
+                holdUntil = clock + roll(0.35...0.8)
+            }
+        }
+        footing = .clinging(to: id, inward: inward, frame: frame, climbed: climbed)
+        guard position.y >= frame.maxY - Self.mantleReach else { return }
+        let mantle = Mantle(from: position, to: CGPoint(x: wallX + inward * Self.agility.footprint, y: frame.maxY))
+        footing = .mantling(onto: id, frame: frame, mantle: mantle, progress: 0)
+    }
+
+    /// Front paws hooked over the top, it pulls itself up and over while its hind legs scrabble.
+    private func haul(onto id: CGWindowID, lastFrame: CGRect, mantle: Mantle, progress: CGFloat, by elapsed: CGFloat, in territory: CatTerritory) {
+        guard let frame = territory.frame(of: id) else { return fall(startled: true) }
+        let velocity = territory.velocity(of: id)
+        if hypot(velocity.dx, velocity.dy) > Self.flingSpeed { return fling(by: velocity) }
+        let mantle = mantle.offset(by: CGVector(dx: frame.minX - lastFrame.minX, dy: frame.maxY - lastFrame.maxY))
+        let progress = min(progress + elapsed / Self.mantleTime, 1)
+        position = mantle.point(at: progress)
+        figure.advanceGait(cycles: Self.scrabbleRate * elapsed)
         isStepping = true
-        footing = .clinging(to: id, inward: inward, frame: frame)
-        guard position.y >= frame.maxY - 4 else { return }
-        position.y = min(position.y, frame.maxY)
-        leap(to: CGPoint(x: wallX + inward * Self.agility.footprint, y: frame.maxY), clearance: 14)
+        guard progress >= 1 else {
+            footing = .mantling(onto: id, frame: frame, mantle: mantle, progress: progress)
+            return
+        }
+        departedLedge = nil
+        footing = .standing(on: id, frame: frame)
+        activity = .landing(until: clock + 0.15)
     }
 
     /// Which way a climbing cat's paws push. Normally against the window's side, with its body
@@ -235,7 +299,11 @@ final class Cat {
                 return
             }
             guard let frame = territory.frame(of: grab.windowID) else { return fall(startled: false) }
-            footing = .clinging(to: grab.windowID, inward: grab.inward, frame: frame)
+            footing = .clinging(to: grab.windowID, inward: grab.inward, frame: frame, climbed: 0)
+            holdUntil = clock + Self.catchTime
+            isCatching = true
+            // Gathered, ready for the first push.
+            figure.startGait(atCycle: 0.5)
             return
         }
         let previous = position
@@ -268,6 +336,7 @@ final class Cat {
         let leap = Leap(from: position, to: target, clearance: clearance, gravity: Self.gravity)
         if abs(target.x - position.x) > 2 { facing = target.x > position.x ? 1 : -1 }
         var grab = grab
+        grab?.duration = leap.duration
         grab?.timeLeft = leap.duration
         footing = .airborne(velocity: leap.launchVelocity, startled: false, grab: grab)
         activity = .idle
@@ -422,13 +491,15 @@ final class Cat {
                 return
             }
             let wallX = wall.inward > 0 ? frame.minX : frame.maxX
-            // The side may start below the cat's ledge or out of reach above it.
-            let grabY = max(position.y, frame.minY + 14)
+            // It springs some way up the side, leaving a bound or two to climb. The side may also
+            // start below the cat's ledge or out of reach above it.
+            let spring = min(Self.wallSpring, max(0, frame.maxY - Self.mantleReach - 2 * Self.climbing.boundLength - position.y))
+            let grabY = max(position.y + spring, frame.minY + 14)
             guard grabY < frame.maxY - 20, grabY - position.y <= Self.agility.leapUp else {
                 activity = .idle
                 return
             }
-            leap(to: CGPoint(x: wallX, y: grabY), clearance: 12, grab: WallGrab(windowID: wall.windowID, inward: wall.inward, timeLeft: 0))
+            leap(to: CGPoint(x: wallX, y: grabY), clearance: 12, grab: WallGrab(windowID: wall.windowID, inward: wall.inward))
         }
     }
 
@@ -528,7 +599,16 @@ final class Cat {
         pose.headLift = gaze
         pose.stride = isStepping ? 0.5 : 0
         switch footing {
-        case .airborne(let velocity, let startled, _):
+        case .airborne(_, _, .some):
+            // Reaching for the wall, with the hind legs tucking under to meet it.
+            pose.frontLegs = 1.1
+            pose.hindLegs = 0.2
+            pose.bodyStretch = 1.08
+            pose.tailAngle = 3.1
+            pose.tailCurl = 0.03
+            pose.headLift = 0.25
+            return pose
+        case .airborne(let velocity, let startled, nil):
             let isRising = velocity.dy > 0
             pose.bodyTilt = min(max(atan2(velocity.dy, abs(velocity.dx) + 250) * 0.6, -0.5), 0.5)
             pose.frontLegs = isRising ? 1.0 : 0.5
@@ -545,10 +625,42 @@ final class Cat {
             }
             return pose
         case .clinging:
-            pose.stride = 0.6
+            // Hugging the wall, legs folded, looking up at where it's going.
+            pose.bodyHeight = 13
+            pose.headLift = 0.25
             pose.tailAngle = 3.3
             pose.tailCurl = 0.02
             pose.tailSway = 0.35
+            pose.bounding = 1
+            if clock < holdUntil {
+                pose.stride = 0
+                pose.frontLegs = 0.6
+                pose.hindLegs = 0.25
+                if isCatching {
+                    pose.bodyHeight = 11
+                    pose.bodyStretch = 0.9
+                } else {
+                    pose.headLift = 0.1 + 0.35 * sin(clock * 2.6)
+                    pose.tailSway = 0.6
+                }
+            } else {
+                pose.stride = 0.75
+                pose.frontLegs = 0.35
+                pose.hindLegs = 0.15
+            }
+            return pose
+        case .mantling(_, _, _, let progress):
+            // Front paws over the edge pull back and push down; hind legs scrabble less as they find the top.
+            pose.bodyHeight = 13 + 5 * progress
+            pose.bodyStretch = 1.1 - 0.1 * progress
+            pose.frontLegs = 0.9 - 1.2 * progress
+            pose.hindLegs = 0.2
+            pose.bounding = 1
+            pose.stride = 0.55 * (1 - progress)
+            pose.headLift = 0.35 * (1 - progress)
+            pose.tailAngle = 3.1
+            pose.tailCurl = 0.02
+            pose.tailSway = 0.4
             return pose
         case .standing:
             break
